@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>主管後台｜業務日報表</title>
+<meta name="robots" content="noindex">
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:"PingFang TC","Microsoft JhengHei",system-ui,sans-serif;background:#eef4f1;color:#1e2a26}
+header{background:#0f766e;color:#fff;padding:22px 18px;text-align:center}
+header h1{margin:0;font-size:25px} header p{margin:8px 0 0;color:#d1fae5;line-height:1.6}
+main{max-width:760px;margin:0 auto;padding:16px 14px 48px}
+section{background:#fff;border-radius:18px;padding:20px;margin-bottom:16px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+h2{font-size:20px;margin:0 0 6px} p.lead{color:#5b6b66;line-height:1.65;margin:0 0 12px}
+label{display:block;font-weight:800;margin:14px 0 6px}
+input[type=text],input[type=date],input[type=month],input[type=password]{width:100%;padding:13px;border:2px solid #cbd8d2;border-radius:12px;font-size:17px}
+button{width:100%;padding:13px;border:0;border-radius:14px;font-size:16px;font-weight:900;cursor:pointer}
+.primary{background:#0f766e;color:#fff;margin-top:12px} .ghost{background:#e6f4f1;color:#0f766e;margin-top:10px} .danger{background:#fff0f0;color:#b00000;margin-top:10px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.small{font-size:14px;color:#6b7a75;line-height:1.65}
+.item{border-top:1px solid #e2e8e5;padding:14px 0;line-height:1.65}
+.badge{display:inline-block;border-radius:999px;padding:3px 10px;font-size:14px;font-weight:800}
+.doing{background:#fef3c7;color:#92400e} .done{background:#d1fae5;color:#065f46} .todo{background:#e0e7ff;color:#3730a3}
+.actions{display:flex;gap:8px;margin-top:8px}.actions button{margin:0;padding:9px;font-size:14px}
+@media(max-width:520px){.row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header><h1>🔒 主管後台｜業務日報表</h1><p>這個後台連結請不要公開貼出。<br>公開日報表頁面沒有名單，只有這裡看得到明細。</p></header>
+<main>
+<section id="lockSec"><h2>🔑 後台密碼</h2><div id="lockBody"></div>
+<p class="small">提醒：這是存在你這支手機／電腦上的簡易鎖，用來擋住隨手點開的人，不是銀行等級的帳號密碼。真正保密要靠：不要把這個連結公開貼出，不要把解鎖後的手機借給別人。</p></section>
+<div id="adminBody" style="display:none">
+<section>
+<h2>📅 查詢日報表</h2>
+<p class="lead">預設顯示今天。選一個日期看當日明細，選一個月份看整月，再按匯出就會只匯出你目前看到的這批。</p>
+<div class="row"><div><label for="qDate">按日期查</label><input id="qDate" type="date"></div>
+<div><label for="qMonth">按月份查</label><input id="qMonth" type="month"></div></div>
+<input id="qName" type="text" placeholder="🔍 姓名或部門關鍵字（可不填）">
+<button class="primary" id="btnToday">看今天的明細</button>
+<button class="ghost" id="btnDate">按上面日期查詢</button>
+<button class="ghost" id="btnMonth">按上面月份查詢</button>
+<button class="ghost" id="btnAll">看全部紀錄</button>
+<p class="small" id="dbNote">正在準備載入…</p>
+<p class="small" id="count"></p>
+<button class="ghost" id="btnReload">🔄 從資料庫重新載入</button>
+<button class="ghost" id="btnExport">⬇️ 匯出目前查詢結果 CSV</button>
+<button class="ghost" id="lockBtn">🔒 鎖定後台</button>
+<button class="ghost" id="changePinBtn">🔑 換一個後台密碼</button>
+</section>
+<section><h2>📋 明細</h2><div id="list"></div></section>
+</div>
+</main>
+<script src="config.js?v=20261026"></script>
+<script>
+const $=id=>document.getElementById(id);
+const API=(typeof DAILY_API!=="undefined"&&DAILY_API.url)?DAILY_API.url:"";
+const TOKEN=(typeof DAILY_API!=="undefined"&&DAILY_API.token)?DAILY_API.token:"";
+const PINKEY="daily-admin-pin-v1";
+let allRows=[],viewRows=[],viewLabel="全部";
+function esc(s){return String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function todayStr(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function badge(s){return s==="已完工"?'<span class="badge done">已完工</span>':s==="待追蹤"?'<span class="badge todo">待追蹤</span>':'<span class="badge doing">進行中</span>';}
+function render(){
+  const q=($("qName").value||"").trim();
+  let list=viewRows;
+  if(q)list=list.filter(r=>(r.name+r.dept).includes(q));
+  $("count").textContent=viewLabel+"共 "+viewRows.length+" 筆"+(q?"，關鍵字篩到 "+list.length+" 筆":"")+"。";
+  $("list").innerHTML=list.length?list.map(r=>`<div class="item"><b>${esc(r.name)}</b> ・ ${esc(r.dept)} ${badge(r.status)} ${r.arrival==="已到達"?'<span class="badge done">✅ 已到達</span>':r.arrival==="未到達"?'<span class="badge" style="background:#fee2e2;color:#991b1b">❌ 未到達</span>':'<span class="badge" style="background:#e5e7eb;color:#374151">⏳ 未判定</span>'}<br>
+  <span class="small">${esc(r.date)} ${esc(r.time)} ・ ${esc(r.client)?"客戶："+esc(r.client)+" ・ ":""}${esc(r.place)||"未填地點名稱"}${r.clientAddress?`<br>客戶地址：${esc(r.clientAddress)}`:""}</span><br>
+  ${esc(r.content)}<br>
+  <span class="small">${r.lat&&r.lng?`<a href="https://maps.google.com/?q=${r.lat},${r.lng}" target="_blank" rel="noopener">📍 地圖：${r.lat}, ${r.lng}</a> ・ `:"⚠️ 沒有 GPS 定位 ・ "}${esc(r.locStatus)}${r.locTime?` ・ 定位時間：${esc(r.locTime)}`:""}${r.distanceM?` ・ 離目標 ${esc(r.distanceM)} 公尺`:""}</span>
+  <div class="actions"><button class="danger" onclick="delRow(${r.row})">刪除這筆</button></div></div>`).join(""):"<p>這個查詢條件目前沒有紀錄。</p>";
+}
+function applyFilter(kind){
+  if(kind==="today"){const t=todayStr();viewRows=allRows.filter(r=>r.date===t);viewLabel="今天（"+t+"）";}
+  else if(kind==="date"){const d=$("qDate").value;if(!d){alert("請先選日期。");return;}viewRows=allRows.filter(r=>r.date===d);viewLabel=d+" 當日";}
+  else if(kind==="month"){const m=$("qMonth").value;if(!m){alert("請先選月份。");return;}viewRows=allRows.filter(r=>r.date.startsWith(m));viewLabel=m+" 整月";}
+  else{viewRows=allRows.slice();viewLabel="全部";}
+  render();
+}
+$("btnToday").onclick=()=>applyFilter("today");
+$("btnDate").onclick=()=>applyFilter("date");
+$("btnMonth").onclick=()=>applyFilter("month");
+$("btnAll").onclick=()=>applyFilter("all");
+$("qName").addEventListener("input",render);
+$("btnReload").onclick=loadDb;
+$("btnExport").onclick=()=>{
+  const q=($("qName").value||"").trim();let list=q?viewRows.filter(r=>(r.name+r.dept).includes(q)):viewRows;
+  if(!list.length){alert("目前沒有可以匯出的紀錄。");return;}
+  const rows=[["日期","時間","姓名","部門","狀態","客戶／對象","客戶地址","工作內容","拜訪地點","緯度","經度","地圖連結","定位狀態","填寫時間","定位時間","目標地點","距離公尺","到達判定"]];
+  list.forEach(r=>rows.push([r.date,r.time,r.name,r.dept,r.status,r.client,r.clientAddress||"",r.content,r.place,r.lat,r.lng,(r.lat&&r.lng)?"https://maps.google.com/?q="+r.lat+","+r.lng:"",r.locStatus,r.createdAt,r.locTime||"",r.targetName||"",r.distanceM||"",r.arrival||"未判定"]));
+  const csv="\ufeff"+rows.map(x=>x.map(c=>`"${String(c??"").replace(/"/g,'""')}"`).join(",")).join("\n");
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
+  a.download="業務日報表-"+viewLabel.replace(/[（）]/g,"")+".csv";a.click();URL.revokeObjectURL(a.href);
+};
+window.delRow=row=>{if(!confirm("確定要從資料庫刪除這筆嗎？刪除後無法復原，建議先匯出備份。"))return;
+  fetch(API+"?action=delete&token="+encodeURIComponent(TOKEN)+"&row="+row).then(()=>{allRows=allRows.filter(x=>x.row!==row);viewRows=viewRows.filter(x=>x.row!==row);render();}).catch(()=>alert("刪除失敗，請直接到試算表刪除該列。"));};
+function loadDb(){
+  if(!API){$("dbNote").textContent="設定檔還沒填資料庫網址：請等部署完成、config.js 更新後，關掉分頁重開後台一次。";return;}
+  $("dbNote").textContent="正在從資料庫載入…";
+  fetch(API+"?action=list&token="+encodeURIComponent(TOKEN)).then(r=>r.json()).then(j=>{if(!j.ok)throw 0;allRows=j.rows;viewRows=allRows.filter(r=>r.date===todayStr());viewLabel="今天（"+todayStr()+"）";$("dbNote").textContent="✅ 已載入 "+allRows.length+" 筆，預設顯示今天。";render();})
+  .catch(()=>{$("dbNote").textContent="⚠️ 載入失敗（可能是試算表尚未部署或網路問題），請直接打開試算表確認，裡面的資料就是後台資料。";});
+}
+function unlock(){sessionStorage.setItem("daily-admin-unlocked","1");$("lockSec").style.display="none";$("adminBody").style.display="block";$("qDate").value=todayStr();loadDb();}
+function showLock(){
+  const pin=localStorage.getItem(PINKEY);
+  if(!pin){$("lockBody").innerHTML=`<p class="lead">第一次開後台，請先設一個你記得住的後台密碼。</p><label>設定後台密碼</label><input id="newPin" type="password" placeholder="至少 4 個字"><button class="primary" id="setPinBtn">設定並進入後台</button>`;
+    $("setPinBtn").onclick=()=>{const v=$("newPin").value.trim();if(v.length<4){alert("密碼至少 4 個字。");return;}localStorage.setItem(PINKEY,v);unlock();};}
+  else{$("lockBody").innerHTML=`<label>請輸入後台密碼</label><input id="pinIn" type="password" placeholder="輸入後台密碼"><button class="primary" id="unlockBtn">進入後台</button><button class="ghost" id="forgetBtn">忘記密碼（只清除密碼鎖，名單不會刪）</button>`;
+    $("unlockBtn").onclick=()=>{if($("pinIn").value===pin)unlock();else alert("密碼不對，請再試一次。");};
+    $("forgetBtn").onclick=()=>{if(confirm("確定要清除後台密碼鎖嗎？紀錄不會被刪除，下次開後台會請你重新設定密碼。")){localStorage.removeItem(PINKEY);location.reload();}};}
+}
+$("lockBtn").onclick=()=>{sessionStorage.removeItem("daily-admin-unlocked");location.reload();};
+$("changePinBtn").onclick=()=>{const v=prompt("請輸入新的後台密碼（至少 4 個字）：");if(v&&v.trim().length>=4){localStorage.setItem(PINKEY,v.trim());alert("後台密碼已更換。");}else if(v!==null){alert("密碼至少 4 個字，沒有更換。");}};
+if(sessionStorage.getItem("daily-admin-unlocked")==="1")unlock();else showLock();
+</script>
+</body>
+</html>

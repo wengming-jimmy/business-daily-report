@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>業務日報表｜志明哥</title>
+<meta name="robots" content="noindex">
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:"PingFang TC","Microsoft JhengHei",system-ui,sans-serif;background:#eef4f1;color:#1e2a26}
+header{background:#0f766e;color:#fff;padding:22px 18px;text-align:center}
+header h1{margin:0;font-size:26px} header p{margin:8px 0 0;line-height:1.6;color:#d1fae5}
+main{max-width:680px;margin:0 auto;padding:16px 14px 48px}
+section{background:#fff;border-radius:18px;padding:20px;margin-bottom:16px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+h2{font-size:19px;margin:0 0 6px} p.lead{color:#5b6b66;line-height:1.65;margin:0 0 12px}
+label{display:block;font-weight:800;margin:14px 0 6px}
+input[type=text],input[type=date],textarea,select{width:100%;padding:13px;border:2px solid #cbd8d2;border-radius:12px;font-size:17px;background:#fff}
+textarea{line-height:1.6}
+button{width:100%;padding:14px;border:0;border-radius:14px;font-size:17px;font-weight:900;cursor:pointer}
+.primary{background:#0f766e;color:#fff;margin-top:16px}
+.ghost{background:#e6f4f1;color:#0f766e;margin-top:10px}
+.small{font-size:14px;color:#6b7a75;line-height:1.65}
+.status{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.status label{margin:0;font-weight:700;border:2px solid #cbd8d2;border-radius:12px;padding:12px 6px;text-align:center;cursor:pointer}
+.status input{width:20px;height:20px;vertical-align:-4px}
+.status label:has(input:checked){background:#d1fae5;border-color:#0f766e}
+.ok{color:#0f766e;font-weight:800} .warn{background:#fff7cc;border:2px solid #e6a700;border-radius:12px;padding:12px;line-height:1.65}
+#nowTime{font-weight:800}
+@media(max-width:520px){.status{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header><h1>📋 業務日報表</h1><p>地點是必填的：打開自動帶入，<br>送出時會再重新抓一次最新位置，主管才能確認你當下真的在那裡。</p></header>
+<main>
+<section>
+<h2>今天的工作紀錄</h2>
+<p class="lead">姓名、部門只填一次，下次打開會自動幫你帶入，不用重打。</p>
+<form id="f">
+<label for="name">姓名 ＊</label><input id="name" type="text" required placeholder="例如：王小明">
+<label for="dept">部門 ＊</label><input id="dept" type="text" required placeholder="例如：業務部">
+<label>現在時間（送出時以當下時間為準）</label>
+<p>🕐 <span id="nowTime">—</span>　📅 <span id="nowDate">—</span></p>
+<label for="client">客戶／拜訪對象（可不填）</label><input id="client" type="text" placeholder="例如：XX公司、陳經理">
+<label for="clientAddress">客戶地址 ＊（業務自己輸入，主管拿來跟 GPS 比對）</label><input id="clientAddress" type="text" required placeholder="例如：台北市中山區XX路XX號">
+<div id="placeSelectWrap" style="display:none"><label for="placeSelect">拜訪地點 ＊（選一個，系統會自動比對你有沒有到）</label><select id="placeSelect" style="width:100%;padding:13px;border:2px solid #cbd8d2;border-radius:12px;font-size:17px"></select></div>
+<div id="placeTextWrap"><label for="place">拜訪地點 ＊（要去的那個位置，主管會拿來跟 GPS 比對）</label><input id="place" type="text" required placeholder="例如：XX公司、台北市中山區XX路"></div>
+<p class="small" id="arrivalBox" style="display:none"></p>
+<div id="locBox" class="warn">📍 正在嘗試取得手機位置…請允許瀏覽器使用位置權限。若在 LINE、Facebook 內開網頁拿不到位置，請改用 Safari 或 Chrome 直接開這個網址。</div>
+<button type="button" class="ghost" id="locBtn">📍 重新取得目前位置</button>
+<p class="small" id="locDetail">尚未取得定位。沒有定位就不能送出，這是為了讓主管確認位置。</p>
+<label>目前狀態 ＊</label>
+<div class="status">
+<label><input type="radio" name="status" value="進行中" checked> 進行中</label>
+<label><input type="radio" name="status" value="已完工"> 已完工</label>
+<label><input type="radio" name="status" value="待追蹤"> 待追蹤</label>
+</div>
+<label for="content">工作內容／報告 ＊</label>
+<textarea id="content" rows="5" required placeholder="例如：拜訪XX公司，介紹新方案，客戶說下週回覆；或：已完成XX案安裝，客戶已簽收。"></textarea>
+<button class="primary" type="submit" id="submitBtn">✅ 送出日報表</button>
+<p id="msg" class="small"></p>
+<p class="small">提醒：位置只在你按「送出」那一刻重新抓取並跟這筆紀錄一起寫入，不會一直追蹤你。送出前如果定位失敗，請先到室外或開闊處再按「重新取得目前位置」，沒有定位就送不出去。</p>
+</form>
+</section>
+</main>
+<script src="locations.js?v=20261026"></script>
+<script src="config.js?v=20261026"></script>
+<script>
+const $=id=>document.getElementById(id);
+const API=(typeof DAILY_API!=="undefined"&&DAILY_API.url)?DAILY_API.url:"";
+const TOKEN=(typeof DAILY_API!=="undefined"&&DAILY_API.token)?DAILY_API.token:"";
+let lat="",lng="",locStatus="尚未取得定位",locTime="";
+let distanceM="",arrival="未判定",targetLoc=null;
+const LOCS=(typeof CLIENT_LOCATIONS!=="undefined")?CLIENT_LOCATIONS:[];
+function haversineM(lat1,lng1,lat2,lng2){const R=6371000,toRad=d=>d*Math.PI/180;const dLat=toRad(lat2-lat1),dLng=toRad(lng2-lng1);const a=Math.sin(dLat/2)**2+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;return Math.round(R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)));}
+function currentTarget(){
+  if(!LOCS.length)return null;
+  const sel=$("placeSelect");if(!sel||sel.value==="")return null;
+  return LOCS.find(x=>x.name===sel.value)||null;
+}
+function updateArrival(){
+  targetLoc=currentTarget();
+  // 注意：客戶地址一律由業務自己打，不從清單自動帶入，避免業務沒確認就直接送出清單上的地址；
+  // 清單上的地址只用來查座標、做距離判定，主管再拿業務打的地址跟 GPS 比對。
+  const box=$("arrivalBox");
+  if(!targetLoc||!lat||!lng){distanceM="";arrival="未判定";if(targetLoc&&!lat)box.style.display="block",box.textContent="⏳ 已選 "+targetLoc.name+"，等定位抓到就會自動判定有沒有到。";else if(!targetLoc)box.style.display="none";return;}
+  const radius=targetLoc.radius||200;
+  distanceM=haversineM(Number(lat),Number(lng),targetLoc.lat,targetLoc.lng);
+  arrival=distanceM<=radius?"已到達":"未到達";
+  box.style.display="block";
+  box.innerHTML=(arrival==="已到達"?"✅ 已到達 ":"❌ 未到達 ")+targetLoc.name+"：你現在離目標約 "+distanceM+" 公尺，判定範圍 "+radius+" 公尺。"+(arrival==="未到達"?"（未到達也可以送出，後台會標示，主管看得到距離。）":"");
+}
+// 地點清單有資料時，前台改成下拉選單；還沒給清單時，維持手填，不卡住
+if(LOCS.length){
+  $("placeSelectWrap").style.display="block";$("placeTextWrap").style.display="none";
+  $("place").required=false;
+  $("placeSelect").innerHTML='<option value="">請選拜訪地點</option>'+LOCS.map(x=>`<option value="${x.name}">${x.name}</option>`).join("");
+  $("placeSelect").addEventListener("change",updateArrival);
+}
+function tick(){const n=new Date();$("nowTime").textContent=n.toLocaleTimeString("zh-TW",{hour12:false});$("nowDate").textContent=n.toLocaleDateString("zh-TW");}
+tick();setInterval(tick,1000);
+// 記住上次姓名部門
+try{$("name").value=localStorage.getItem("daily-name")||"";$("dept").value=localStorage.getItem("daily-dept")||"";}catch(e){}
+function getLoc(){
+  return new Promise(resolve=>{
+    $("locBox").textContent="📍 正在取得位置…請在跳出的權限視窗按「允許」。";
+    if(!navigator.geolocation){lat="";lng="";locTime="";locStatus="此裝置／瀏覽器不支援定位";$("locBox").textContent="⚠️ "+locStatus+"，沒有定位不能送出，請換一支手機或改用 Safari／Chrome 再試。";$("locDetail").textContent=locStatus;resolve(false);return;}
+    navigator.geolocation.getCurrentPosition(p=>{
+      lat=String(p.coords.latitude);lng=String(p.coords.longitude);
+      locTime=new Date().toLocaleString("zh-TW",{hour12:false});
+      locStatus="已取得定位（約 "+Math.round(p.coords.accuracy)+" 公尺範圍）";
+      $("locBox").textContent="✅ "+locStatus+" ・ 定位時間："+locTime;
+      $("locDetail").innerHTML="緯度 "+lat+"，經度 "+lng+"，定位時間 "+locTime+"<br><a href=\"https://maps.google.com/?q="+lat+","+lng+"\" target=\"_blank\" rel=\"noopener\">在 Google 地圖上看這個點</a>";
+      updateArrival();
+      resolve(true);
+    },err=>{
+      lat="";lng="";locTime="";
+      const why={1:"你按了不允許定位",2:"目前拿不到 GPS 訊號（室內常這樣，請到室外再試）",3:"定位逾時"}[err.code]||"定位失敗";
+      locStatus="未取得定位："+why;
+      $("locBox").textContent="⚠️ "+locStatus+"。沒有定位不能送出，請按下面重新取得。";
+      $("locDetail").textContent=locStatus;
+      resolve(false);
+    },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+  });
+}
+$("locBtn").onclick=()=>getLoc(); getLoc();
+$("f").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const name=$("name").value.trim(),dept=$("dept").value.trim(),place=(LOCS.length?$("placeSelect").value:$("place").value.trim()),clientAddress=$("clientAddress").value.trim(),content=$("content").value.trim();
+  if(!name||!dept||!place||!clientAddress||!content){alert("姓名、部門、拜訪地點、客戶地址、工作內容都要填。");return;}
+  $("submitBtn").disabled=true;$("submitBtn").textContent="正在重新取得最新位置…";$("msg").textContent="";
+  // 關鍵：送出前強制重抓一次最新 GPS，不用打開時那個舊位置，避免人在家卻用在客戶那裡抓的位置送出
+  const okLoc=await getLoc();
+  if(!okLoc){alert("還沒有定位，不能送出。請允許位置權限、到室外或訊號好的地方，再按「重新取得目前位置」後重送。");$("submitBtn").disabled=false;$("submitBtn").textContent="✅ 送出日報表";return;}
+  try{localStorage.setItem("daily-name",name);localStorage.setItem("daily-dept",dept);}catch(err){}
+  const now=new Date();
+  const data={name,dept,client:$("client").value.trim(),clientAddress,place,
+    status:document.querySelector('input[name="status"]:checked').value,content,
+    lat,lng,locStatus,locTime,submittedAt:now.toISOString(),
+    targetName:targetLoc?targetLoc.name:"",targetLat:targetLoc?String(targetLoc.lat):"",targetLng:targetLoc?String(targetLoc.lng):"",
+    distanceM:distanceM===""?"":String(distanceM),arrival};
+  $("submitBtn").textContent="送出中…";
+  if(!API){$("msg").innerHTML="⚠️ 資料庫還沒接好，這筆先存在這支手機的備份區（<b>未進正式資料庫</b>）。請等後台接好後再送一次。";$("submitBtn").disabled=false;$("submitBtn").textContent="✅ 送出日報表";return;}
+  try{
+    const r=await fetch(API,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify(Object.assign({token:TOKEN},data))});
+    const j=await r.json();
+    if(!j.ok)throw new Error(j.error||"fail");
+    $("msg").innerHTML="<span class='ok'>✅ 已送出！"+now.toLocaleString("zh-TW",{hour12:false})+" ・ "+data.status+(data.arrival!=="未判定"?" ・ "+data.arrival+"（離目標 "+data.distanceM+" 公尺）":"")+"，已寫入資料庫。</span>";
+    $("content").value="";$("client").value="";$("place").value="";lat="";lng="";getLoc();
+  }catch(err){
+    $("msg").textContent="⚠️ 送出失敗（可能是網路或資料庫還沒部署好），請確認網路後再按一次送出，不要重複填新的一筆。";
+  }
+  $("submitBtn").disabled=false;$("submitBtn").textContent="✅ 送出日報表";
+});
+</script>
+</body>
+</html>
